@@ -1,0 +1,6 @@
+.spinner { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--c-text-muted); }
+.spinner__icon { animation: spinner-rot 0.9s linear infinite; }
+.spinner__label { font-size: var(--fs-sm); }
+.spinner-page { display: grid; place-items: center; min-height: 240px; }
+@keyframes spinner-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner__icon { animation-duration: 2.5s; } }

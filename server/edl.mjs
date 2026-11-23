@@ -1,0 +1,12 @@
+const fail=path=>{throw Object.assign(new Error('Ungültige Schnittliste.'),{status:400,code:'invalid_edl',details:{path}});};
+const exact=(o,keys,p)=>{if(!o||typeof o!=='object'||Array.isArray(o)||Object.keys(o).some(k=>!keys.includes(k)))fail(p);};
+export function validate(edl,tracks){exact(edl,['v','clips'],'edl');if(edl.v!==1||!Array.isArray(edl.clips)||edl.clips.length>200)fail('clips');const ids=new Set();let total=0;for(const [i,c] of edl.clips.entries()){const p=`clips.${i}`;exact(c,['id','trackId','inMs','outMs'],p);if(typeof c.id!=='string'||!/^[A-Za-z0-9_-]{1,32}$/.test(c.id)||ids.has(c.id))fail(p+'.id');ids.add(c.id);if(typeof c.trackId!=='string'||!c.trackId)fail(p+'.trackId');if(!Number.isSafeInteger(c.inMs)||!Number.isSafeInteger(c.outMs)||c.inMs<0||c.outMs-c.inMs<100)fail(p+'.inMs');if(tracks!==undefined){const t=Array.isArray(tracks)?tracks.find(t=>(t.id??t.trackId)===c.trackId):tracks instanceof Map?tracks.get(c.trackId):tracks[c.trackId];if(!t||c.outMs>t.durationMs)fail(p+'.outMs');}total+=c.outMs-c.inMs;}if(total>21600000)fail('durationMs');return {v:1,clips:edl.clips.map(c=>({id:c.id,trackId:c.trackId,inMs:c.inMs,outMs:c.outMs}))};}
+export const durationMs=edl=>edl.clips.reduce((s,c)=>s+c.outMs-c.inMs,0);
+export function timeline(edl){let startMs=0;return edl.clips.map(({id,...c})=>{const row={...c,clipId:id,startMs,endMs:startMs+c.outMs-c.inMs};startMs=row.endMs;return row;});}
+export function toSource(edl,editMs){const c=timeline(edl).find(c=>editMs>=c.startMs&&editMs<c.endMs);return c?{clipId:c.clipId,trackId:c.trackId,sourceMs:c.inMs+editMs-c.startMs}:null;}
+const index=(e,id)=>{const i=e.clips.findIndex(c=>c.id===id);if(i<0)fail('clipId');return i;};
+export function split(edl,id,ms,newId){const e=validate(edl),i=index(e,id),c=e.clips[i],t=timeline(e)[i],at=c.inMs+ms-t.startMs;e.clips.splice(i,1,{...c,outMs:at},{...c,id:newId,inMs:at});return validate(e);}
+export function trim(edl,id,bounds){exact(bounds,['inMs','outMs'],'bounds');const e=validate(edl),i=index(e,id);e.clips[i]={...e.clips[i],...bounds};return validate(e);}
+export function remove(edl,id){const e=validate(edl);e.clips.splice(index(e,id),1);return e;}
+export function move(edl,id,toIndex){const e=validate(edl);if(!Number.isInteger(toIndex)||toIndex<0||toIndex>=e.clips.length)fail('toIndex');e.clips.splice(toIndex,0,e.clips.splice(index(e,id),1)[0]);return e;}
+export const canonical=edl=>JSON.stringify(validate(edl));

@@ -1,0 +1,64 @@
+import {live} from './live.mjs';
+import { quota } from './quota.mjs';
+import { stat, rm } from 'node:fs/promises';
+import { guard, session, requireUser, limit } from './auth.mjs';
+import { platform } from './platform.mjs';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { atomicStream, MAX_CHUNK, problem, sendFile, freeBytes } from './storage.mjs';
+import { chunkPath, contiguous, finalize, trackDir, extensions, exists } from './tracks.mjs';
+import { createExport, exportPath } from './exports.mjs';
+export const json=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
+export async function body(req,maxBytes=16384){const chunks=[];let size=0;for await(const b of req){size+=b.length;if(size>maxBytes)throw problem(413,'too_large','JSON ist zu groß.');chunks.push(b);}try{const v=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!v||typeof v!=='object'||Array.isArray(v))throw Error();return v;}catch{throw problem(400,'invalid_json','Ungültiges JSON.');}}
+function title(value){if(typeof value!=='string'||!value.trim()||value.trim().length>120)throw problem(400,'invalid_input','Titel muss 1 bis 120 Zeichen haben.');return value.trim();}
+const safeName=s=>s.replace(/[\x00-\x1f\x7f/\\:"<>|?*]/g,'_').slice(0,240);
+export function router(ctx){
+ const unlocked=id=>{if(ctx.archiveLocks?.has(id))throw problem(409,'not_ready','Archivübernahme läuft.');};
+ const media=async(req,res,id,file,options)=>{unlocked(id);ctx.archiveReaders??=new Map();ctx.archiveReaders.set(id,(ctx.archiveReaders.get(id)??0)+1);try{return await sendFile(req,res,file,options);}finally{const n=ctx.archiveReaders.get(id)-1;if(n)ctx.archiveReaders.set(id,n);else ctx.archiveReaders.delete(id);}};
+
+ const get=(user,table,id)=>{if(!/^[0-9a-f-]{36}$/.test(id))throw problem(404,'not_found','Nicht gefunden.');const r=ctx.db.get(table,id);if(!r||r.ownerId!==user.id)throw problem(404,'not_found','Nicht gefunden.');return r;};
+ return async(req,res)=>{try{
+ guard(ctx,req,res);
+ // Exact watch namespace only: never read the owner-session cookie here.
+ const watchUrl=new URL(req.url,'http://localhost');
+ let watchPath=decodeURIComponent(watchUrl.pathname);
+ if(ctx.base&&(watchPath===ctx.base||watchPath.startsWith(ctx.base+'/')))watchPath=watchPath.slice(ctx.base.length)||'/';
+ if(watchPath.startsWith('/api/watch/')&&!watchPath.includes('\0')){if(await live(ctx,req,res,watchPath,null,{json,body}))return;}
+ const user=session(ctx,req);
+ const getOwned=(table,id)=>get(user,table,id);const own=table=>ctx.db.where(table,'ownerId',user.id);
+
+ const track=t=>{const {chunkCount,...publicTrack}=t;const tr=ctx.db.sql.prepare('SELECT edited,updated_at FROM transcripts WHERE track_id=?').get(t.id),j=ctx.db.sql.prepare("SELECT id,status FROM jobs WHERE subject_id=? AND kind='asr' ORDER BY created_at DESC,rowid DESC LIMIT 1").get(t.id);return {...publicTrack,local:t.local!==false,archive:t.archive??{status:'none',verifiedAt:null,error:null},transcription:{status:j&&['queued','running'].includes(j.status)?j.status:tr?'ready':j?({queued:'queued',running:'running',failed:'failed',canceled:'failed'}[j.status]??'none'):'none',jobId:j?.id??null,edited:!!tr?.edited,updatedAt:tr?.updated_at??null},exports:own('exports').filter(e=>e.trackId===t.id)};};
+ const recording=r=>({...r,tracks:own('tracks').filter(t=>t.recordingId===r.id).map(track)});
+ const project=p=>{const rs=own('recordings').filter(r=>r.projectId===p.id);return {...p,recordingCount:rs.length,lastRecordingAt:rs.at(-1)?.createdAt??null,recordingTitles:rs.map(r=>r.title)};};
+ const url=new URL(req.url,'http://localhost');let pathname=decodeURIComponent(url.pathname);if(ctx.base&& (pathname===ctx.base||pathname.startsWith(ctx.base+'/')))pathname=pathname.slice(ctx.base.length)||'/';
+ if(pathname.includes('\0'))throw problem(400,'invalid_path','Ungültiger Pfad.');
+ const parts=pathname.split('/').filter(Boolean),method=req.method;const verb=(...allowed)=>{if(!allowed.includes(method))throw problem(405,'method_not_allowed','Methode nicht erlaubt.');};
+ if(parts[0]!=='api'){if(pathname.startsWith('/api')||parts.includes('api'))throw problem(404,'not_found','Nicht gefunden.');res.setHeader('Content-Security-Policy',"default-src 'self'; media-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");verb('GET','HEAD');if(pathname.includes('..')||pathname.includes('\\'))throw problem(400,'invalid_path','Ungültiger Pfad.');let file=path.join(ctx.dist,pathname);if(!await exists(file)||pathname==='/')file=path.join(ctx.dist,'index.html');const ext=path.extname(file);return await sendFile(req,res,file,{type:({'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.woff2':'font/woff2','.png':'image/png'})[ext]});}
+ if(pathname==='/api/health'){verb('GET');return json(res,200,{ok:true,version:'1.0.0',...(user?{freeBytes:await freeBytes(ctx.dataDir),ffmpeg:ctx.hasFFmpeg}:{})});}
+ if(await platform(ctx,req,res,pathname,user,{json,body}))return;requireUser(user);
+ if(parts[1]==='projects'){
+ if(parts.length===2){verb('GET','POST');if(method==='GET')return json(res,200,own('projects').reverse().map(project));limit(ctx,'create:'+user.id,60,60000);const b=await body(req);return json(res,201,project(ctx.db.put('projects',{id:randomUUID(),ownerId:user.id,title:title(b.title),createdAt:new Date().toISOString()})));}
+ const p=getOwned('projects',parts[2]);if(parts.length===3){verb('GET','PATCH');if(method==='PATCH'){p.title=title((await body(req)).title);ctx.db.put('projects',p);return json(res,200,project(p));}return json(res,200,{...project(p),recordings:own('recordings').filter(r=>r.projectId===p.id).reverse().map(recording)});}
+ if(parts.length===4&&parts[3]==='recordings'){verb('POST');limit(ctx,'create:'+user.id,60,60000);const b=await body(req),base=typeof b.mimeType==='string'?b.mimeType.split(';')[0]:'';const source=b.source??'studio';if(!['studio','upload'].includes(source)||source==='upload'&&(!Number.isSafeInteger(b.declaredBytes)||b.declaredBytes<1||b.declaredBytes>50*1024**3))throw problem(400,'invalid_input','Ungültiger Upload.');if(source==='studio'&&['audio/mpeg','audio/wav'].includes(base))throw problem(415,'unsupported_media','Nur als Upload unterstützt.');quota(ctx.db).checkStorage(user.id,source==='upload'?b.declaredBytes:0);if(!extensions[base])throw problem(415,'unsupported_media','Medienformat nicht unterstützt.');if(!['audio','video'].includes(b.kind)||!base.startsWith(b.kind+'/')||typeof b.participantName!=='string'||!b.participantName.trim()||b.participantName.length>120||!(b.startedAtMs===null||Number.isFinite(b.startedAtMs)&&b.startedAtMs>=0))throw problem(400,'invalid_input','Ungültige Aufnahmedaten.');
+ const r={id:randomUUID(),ownerId:p.ownerId,projectId:p.id,title:title(b.title),createdAt:new Date().toISOString()};const t={id:randomUUID(),ownerId:p.ownerId,recordingId:r.id,participantName:b.participantName.trim(),kind:b.kind,source,declaredBytes:source==='upload'?b.declaredBytes:null,uploadBytes:0,mimeType:b.mimeType,status:'uploading',error:null,receivedChunks:0,bytes:null,durationMs:null,width:null,height:null,sha256:null,startedAtMs:b.startedAtMs,lastChunkAt:null,hasRaw:false};
+ ctx.db.sql.exec('BEGIN IMMEDIATE');try{quota(ctx.db).checkStorage(user.id,source==='upload'?b.declaredBytes:0);ctx.db.put('recordings',r);ctx.db.put('tracks',t);ctx.db.sql.exec('COMMIT');}catch(e){ctx.db.sql.exec('ROLLBACK');throw e;}return json(res,201,{recording:recording(r),track:track(t)});}
+ }
+ if(parts[1]==='recordings'&&parts.length===3){verb('DELETE');const r=getOwned('recordings',parts[2]),ts=own('tracks').filter(t=>t.recordingId===r.id),sql=ctx.db.sql;
+ // ponytail: verifizierte Archivkopien bleiben im Archivziel liegen (kein Löschen von Sicherungsständen).
+ for(const t of ts){if(t.status==='processing'||ctx.uploads.has(t.id)||ctx.archiveLocks?.has(t.id)||(ctx.archiveReaders?.get(t.id)??0)>0||own('exports').some(e=>e.trackId===t.id&&['queued','processing'].includes(e.status))||sql.prepare("SELECT 1 FROM jobs WHERE subject_type='track' AND subject_id=? AND status IN ('queued','running') LIMIT 1").get(t.id)||sql.prepare("SELECT 1 FROM renders r,json_each(r.track_ids) x WHERE r.status IN ('queued','processing') AND x.value=? LIMIT 1").get(t.id))throw problem(409,'track_busy','Aufnahme wird gerade verarbeitet. Bitte später erneut versuchen.');}
+ const ids=new Set(ts.map(t=>t.id)),used=sql.prepare('SELECT e.title,v.edl FROM edits e JOIN edit_revisions v ON v.edit_id=e.id AND v.revision=e.revision WHERE e.owner_id=?').all(user.id).filter(e=>(JSON.parse(e.edl).clips??[]).some(c=>ids.has(c.trackId))).map(e=>e.title);
+ if(used.length)throw problem(409,'in_use','Aufnahme wird noch im Schnitt verwendet: '+used.join(', ')+'.',{edits:used});
+ const dir=path.join(ctx.dataDir,'medien',r.projectId,r.id);
+ ctx.db.tx(()=>{for(const t of ts){sql.prepare('DELETE FROM transcripts WHERE track_id=?').run(t.id);sql.prepare('UPDATE generations SET track_id=NULL WHERE track_id=?').run(t.id);sql.prepare("DELETE FROM exports WHERE json_extract(data,'$.trackId')=?").run(t.id);sql.prepare('DELETE FROM tracks WHERE id=?').run(t.id);}sql.prepare('DELETE FROM recordings WHERE id=?').run(r.id);});
+ await rm(dir,{recursive:true,force:true});res.writeHead(204);res.end();return;}
+ if(parts[1]==='tracks'){
+ const t=getOwned('tracks',parts[2]);if(parts.length===3){verb('GET');return json(res,200,track(t));}
+ if(parts[3]==='chunks'&&parts.length===5){verb('PUT');if(!/^\d{1,5}$/.test(parts[4]))throw problem(400,'invalid_index','Ungültiger Abschnitt.');if(t.status!=='uploading'||ctx.uploads.has(t.id))throw problem(409,'upload_busy','Spur wird bereits verarbeitet oder hochgeladen.');if(Number(req.headers['content-length'])>MAX_CHUNK)throw problem(413,'too_large','Abschnitt ist zu groß.');ctx.uploads.add(t.id);try{const target=chunkPath(ctx,t,Number(parts[4]));const oldBytes=await stat(target).then(s=>s.size).catch(()=>0);const remaining=t.source==='upload'?Math.max(0,t.declaredBytes-(t.uploadBytes??0)+oldBytes):Infinity;const bytes=await atomicStream(req,target,Math.min(MAX_CHUNK,remaining));const receivedChunks=await contiguous(ctx,t);const fresh=ctx.db.get('tracks',t.id);Object.assign(fresh,{uploadBytes:(fresh.uploadBytes??0)-oldBytes+bytes,receivedChunks,lastChunkAt:new Date().toISOString()});ctx.db.put('tracks',fresh);return json(res,200,{receivedChunks});}finally{ctx.uploads.delete(t.id);}}
+ if(parts.length===4&&parts[3]==='finalize'){verb('POST');if(ctx.uploads.has(t.id))throw problem(409,'upload_busy','Upload läuft noch.');const b=await body(req);if(ctx.uploads.has(t.id))throw problem(409,'upload_busy','Upload läuft noch.');const current=getOwned('tracks',t.id);const status=await finalize(ctx,current,b);return json(res,status,track(current));}
+ if(parts.length===4&&parts[3]==='exports'){verb('POST');unlocked(t.id);limit(ctx,'job:'+user.id,30,60000);quota(ctx.db).checkStorage(user.id);const input=await body(req);unlocked(t.id);const fresh=getOwned('tracks',t.id);if(fresh.local===false)throw problem(409,'not_local','Spur liegt im Archiv.');return json(res,202,createExport(ctx,fresh,input.format));}
+ if(parts.length===4&&parts[3]==='file'){verb('GET','HEAD');if(t.local===false)throw problem(409,'not_local','Spur liegt im Archiv.',{archive:'verified'});const raw=url.searchParams.get('raw')==='1';if(raw?t.status!=='failed'||!t.hasRaw:t.status!=='ready')throw problem(409,'not_ready','Datei ist nicht verfügbar.');const r=getOwned('recordings',t.recordingId),p=getOwned('projects',r.projectId),ext=extensions[t.mimeType.split(';')[0]];return await media(req,res,t.id,path.join(trackDir(ctx,t),(raw?'roh.':'original.')+ext),{type:t.mimeType.split(';')[0],attachment:raw||url.searchParams.get('download')==='1',name:safeName(p.title+' – '+r.title)+'.'+ext});}
+ }
+ if(parts[1]==='exports'){const e=getOwned('exports',parts[2]);verb('GET','HEAD');if(parts.length===3)return json(res,200,e);if(parts.length===4&&parts[3]==='file'){if(e.status!=='ready')throw problem(409,'not_ready','Export ist noch nicht bereit.');if(getOwned('tracks',e.trackId).local===false)throw problem(409,'not_local','Spur liegt im Archiv.');return await media(req,res,e.trackId,exportPath(ctx,e),{type:({'mp3':'audio/mpeg','wav':'audio/wav','mp4':'video/mp4'})[e.format],attachment:true,name:'Export.'+e.format});}}
+ throw problem(404,'not_found','Nicht gefunden.');
+ }catch(e){if(res.headersSent){res.destroy();return;}const status=e.status??(e instanceof URIError?400:e.code==='ENOSPC'?507:500);json(res,status,{error:{code:e.status?e.code:status===400?'invalid_path':status===507?'storage_full':'internal_error',message:status===500?'Interner Serverfehler.':e.message,...e.details}});}};
+}

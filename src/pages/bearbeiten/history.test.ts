@@ -1,0 +1,7 @@
+import {expect,it} from 'vitest';
+import {change,history,undo,redo} from './history';
+import {trim,split,remove,move} from '../../../server/edl.mjs';
+const sources=[{id:'source',durationMs:4000}],edl={v:1 as const,clips:[{id:'one',trackId:'source',inMs:0,outMs:3000}]};
+it('trim, split, reorder, deletion can be undone without changing originals; branching drops redo',()=>{const original=JSON.stringify(edl);let h=history(edl);h=change(h,trim(h.present,'one',{inMs:100,outMs:2900}),sources);h=change(h,split(h.present,'one',1400,'two'),sources);h=change(h,move(h.present,'two',0),sources);h=change(h,remove(h.present,'one'),sources);expect(undo(h).present.clips).toHaveLength(2);expect(redo(undo(h)).present).toEqual(h.present);h=change(undo(h),remove(undo(h).present,'two'),sources);expect(h.future).toHaveLength(0);expect(JSON.stringify(edl)).toBe(original);});
+it('rejects bounds beyond source and sub-100ms split without mutating the undo stack',()=>{const h=history(edl);expect(()=>change(h,trim(edl,'one',{outMs:4001}),sources)).toThrow();expect(()=>split(edl,'one',99,'two')).toThrow();expect(h.past).toHaveLength(0);});
+it('retains 200 undo steps and supports a saved empty draft',()=>{let h=history(edl);for(let i=0;i<220;i++)h=change(h,trim(h.present,'one',{inMs:i+1}),sources);expect(h.past).toHaveLength(200);h=change(h,remove(h.present,'one'),sources);expect(h.present.clips).toHaveLength(0);expect(undo(h).present.clips).toHaveLength(1);});

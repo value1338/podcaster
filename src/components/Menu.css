@@ -1,0 +1,21 @@
+.menu { position: relative; display: inline-block; }
+.menu__list {
+  position: absolute; top: calc(100% + var(--s-1)); z-index: var(--z-menu);
+  min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: var(--s-1);
+  background: var(--c-surface); border-radius: var(--r-md); box-shadow: var(--shadow-pop);
+  overflow-y: auto;
+}
+.menu__list--above { top: auto; bottom: calc(100% + var(--s-1)); }
+.menu__list--end { right: 0; }
+.menu__list--start { left: 0; }
+.menu__item {
+  display: flex; align-items: center; gap: var(--s-3); width: 100%;
+  min-height: 40px; padding: var(--s-2) var(--s-3); border: 0; border-radius: var(--r-sm);
+  background: none; text-align: left; text-decoration: none; cursor: pointer;
+}
+.menu__item:hover, .menu__item:focus-visible { background: var(--c-surface-2); outline: none; }
+.menu__item[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.menu__icon { flex: none; color: var(--c-text-muted); }
+.menu__text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.menu__hint { font-size: var(--fs-xs); color: var(--c-text-muted); }
+.menu__end { flex: none; }

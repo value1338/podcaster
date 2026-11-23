@@ -1,0 +1,28 @@
+# systemd-Vorlage für Podcast-Studio (podcaster).
+# Kopieren nach /etc/systemd/system/podcaster.service, Pfade/Nutzer anpassen,
+# Umgebung in /etc/podcaster.env (Vorlage: .env.example, Rechte 0600).
+[Unit]
+Description=Podcast-Studio
+After=network.target
+
+[Service]
+Type=simple
+User=podcaster
+Group=podcaster
+WorkingDirectory=/opt/podcaster
+EnvironmentFile=/etc/podcaster.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=podcaster
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/podcaster
+
+[Install]
+WantedBy=multi-user.target

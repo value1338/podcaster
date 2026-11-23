@@ -1,0 +1,24 @@
+import {it,expect} from 'vitest';
+import {stat} from 'node:fs/promises';
+import path from 'node:path';
+import {testServer,kontoAnlegen} from './hilfen.mjs';
+it('Aufnahme löschen: entfernt Dateien und Zeilen, blockiert bei Nutzung im Schnitt und Upload',async()=>{const s=await testServer();try{
+ const c=(await kontoAnlegen(s.request,s.link.url.split('/').pop(),{displayName:'Del',password:'Sicheres-Passwort-123!'})).headers.get('set-cookie').split(';')[0];
+ const j=async r=>{expect(r.ok,r.status+' '+await r.clone().text()).toBe(true);return r.json();};
+ const p=await j(await s.request('POST','/projects',{title:'P'},c));
+ const {recording:r,track:t}=await j(await s.request('POST','/projects/'+p.id+'/recordings',{title:'A',kind:'audio',mimeType:'audio/webm',participantName:'X',startedAtMs:0},c));
+ const port=s.app.server.address().port;const put=await fetch(`http://127.0.0.1:${port}/api/tracks/${t.id}/chunks/0`,{method:'PUT',headers:{'X-Studio':'1',Origin:'http://127.0.0.1:8871',Cookie:c},body:Buffer.from('abc')});expect(put.status).toBe(200);
+ const dir=path.join(s.dir,'medien',p.id,r.id);await stat(dir);
+ const sql=s.app.ctx.db.sql,now=new Date().toISOString(),uid=t.ownerId;
+ sql.prepare("INSERT INTO edits VALUES ('e1',?,?,'Folge 1','audio',1,?,?)").run(uid,p.id,now,now);
+ sql.prepare("INSERT INTO edit_revisions VALUES ('e1',1,?,?,'x',1000,?)").run(uid,JSON.stringify({clips:[{trackId:t.id,inMs:0,outMs:1000}]}),now);
+ let res=await s.request('DELETE','/recordings/'+r.id,undefined,c);expect(res.status).toBe(409);expect((await res.json()).error.code).toBe('in_use');
+ sql.prepare("INSERT INTO edit_revisions VALUES ('e1',2,?,?,'y',0,?)").run(uid,JSON.stringify({clips:[]}),now);sql.prepare("UPDATE edits SET revision=2 WHERE id='e1'").run();
+ s.app.ctx.uploads.add(t.id);res=await s.request('DELETE','/recordings/'+r.id,undefined,c);expect(res.status).toBe(409);s.app.ctx.uploads.delete(t.id);
+ res=await s.request('DELETE','/recordings/'+r.id);expect(res.status).toBe(401);
+ res=await s.request('DELETE','/recordings/'+r.id,undefined,c);expect(res.status).toBe(204);
+ await expect(stat(dir)).rejects.toThrow();
+ expect(s.app.ctx.db.get('tracks',t.id)).toBeUndefined();
+ expect((await j(await s.request('GET','/projects/'+p.id,undefined,c))).recordings).toEqual([]);
+ expect((await s.request('DELETE','/recordings/'+r.id,undefined,c)).status).toBe(404);
+}finally{await s.close();}});

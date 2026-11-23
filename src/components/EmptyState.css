@@ -1,0 +1,11 @@
+.empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: var(--s-3); padding: var(--s-12) var(--s-6); max-width: 520px; margin: 0 auto;
+}
+.empty__icon {
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: var(--r-lg); background: var(--c-surface); color: var(--c-text-muted);
+}
+.empty__title { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; justify-content: center; }
+.empty__text { color: var(--c-text-muted); }
+.empty__action { margin-top: var(--s-2); display: flex; gap: var(--s-2); flex-wrap: wrap; justify-content: center; }

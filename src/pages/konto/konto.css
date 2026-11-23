@@ -1,0 +1,50 @@
+/* Konto: Anmelden, Einladung, Konto-Seite, gemeinsame Zähler (PA6). Nur Tokens aus tokens.css. */
+.konto-rahmen { min-height: 100%; display: grid; place-items: center; padding: var(--s-6) var(--s-4); background: var(--c-bg); }
+.konto-karte {
+  width: 100%; max-width: 420px; display: grid; gap: var(--s-4);
+  padding: var(--s-8) var(--s-6); background: var(--c-panel); border: 1px solid var(--c-line); border-radius: var(--r-lg);
+}
+.konto-marke { display: flex; align-items: center; gap: var(--s-2); font-weight: var(--fw-semibold); color: var(--c-text-muted); }
+.konto-form { display: grid; gap: var(--s-3); }
+.konto-form--schmal { max-width: 420px; }
+.konto-feld { display: grid; gap: var(--s-1); font-size: var(--fs-sm); }
+.konto-feld > span { color: var(--c-text-muted); }
+.konto-feld .field { width: 100%; font-size: var(--fs-md); }
+.konto-feld .field[readonly] { color: var(--c-text-muted); }
+.konto-hinweis {
+  padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: var(--c-surface); border: 1px solid var(--c-line);
+  display: grid; gap: var(--s-2); font-size: var(--fs-sm);
+}
+.konto-hinweis code { font-family: var(--font-mono); font-size: var(--fs-xs); word-break: break-word; }
+.konto-fehler { color: var(--c-error); font-size: var(--fs-sm); background: var(--c-error-soft); padding: var(--s-2) var(--s-3); border-radius: var(--r-md); }
+
+.konto-seite { display: grid; gap: var(--s-6); }
+.konto-seite .page__head { margin-bottom: 0; }
+.konto-abschnitt { display: grid; gap: var(--s-3); }
+.konto-daten { display: grid; grid-template-columns: max-content 1fr; gap: var(--s-2) var(--s-6); margin: 0; }
+.konto-daten dt { color: var(--c-text-muted); }
+.konto-daten dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+.konto-zaehler-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-3); }
+.konto-verbrauch { display: grid; gap: var(--s-3); }
+.konto-zaehler {
+  display: grid; gap: var(--s-1); padding: var(--s-3) var(--s-4);
+  background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-md);
+}
+.konto-zaehler__kopf { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); font-size: var(--fs-sm); color: var(--c-text-muted); }
+.konto-zaehler__wert { font-size: var(--fs-md); }
+.konto-zaehler__klein { font-size: var(--fs-xs); }
+.konto-zaehler__balken { height: 6px; border-radius: var(--r-pill); background: var(--c-surface-3); overflow: hidden; }
+.konto-zaehler__balken > span { display: block; height: 100%; background: var(--c-accent); }
+.konto-zaehler__balken > span.is-voll { background: var(--c-warn); }
+
+.konto-link {
+  display: grid; gap: var(--s-2); padding: var(--s-3) var(--s-4);
+  background: var(--c-accent-soft); border: 1px solid var(--c-accent); border-radius: var(--r-md); font-size: var(--fs-sm);
+}
+.konto-link__zeile { display: flex; gap: var(--s-2); }
+.konto-link__zeile .field { flex: 1; min-width: 0; font-size: var(--fs-xs); }
+@media (max-width: 899px) {
+  .konto-karte { padding: var(--s-6) var(--s-4); }
+  .konto-link__zeile { flex-direction: column; }
+}

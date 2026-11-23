@@ -1,0 +1,15 @@
+.shell { display: flex; height: 100%; background: var(--c-bg); }
+.shell__panel {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  margin: var(--s-3) var(--s-3) var(--s-3) 0;
+  background: var(--c-panel); border: 1px solid var(--c-line); border-radius: var(--r-lg); overflow: hidden;
+}
+.shell__main { flex: 1; overflow-y: auto; min-height: 0; }
+.shell__main:focus { outline: none; }
+.shell__backdrop { display: none; }
+.shell__skip { position: absolute; left: -9999px; }
+.shell__skip:focus { left: var(--s-3); top: var(--s-3); z-index: 100; padding: var(--s-2) var(--s-3); background: var(--c-accent); border-radius: var(--r-md); }
+@media (max-width: 899px) {
+  .shell__panel { margin: 0; border: 0; border-radius: 0; }
+  .shell__backdrop { display: block; position: fixed; inset: 0; z-index: calc(var(--z-drawer) - 1); background: rgb(0 0 0 / 0.6); }
+}

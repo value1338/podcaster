@@ -1,0 +1,12 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env
+AGENTS.md
+deploy/releases/
+deploy/kandidaten/
+deploy/einstieg/
+deploy/podcast-studio.service
+test/real/evidence/
+*.sqlite*

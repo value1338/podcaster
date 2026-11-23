@@ -1,0 +1,20 @@
+# Start: cp .env.example .env, Werte anpassen, dann `docker compose up -d --build`.
+# Port nur auf Loopback; davor einen Reverse-Proxy mit HTTPS betreiben.
+services:
+  podcaster:
+    build:
+      context: .
+      args:
+        VITE_BASE: ${VITE_BASE:-/}
+    env_file: .env
+    environment:
+      STUDIO_HOST: 0.0.0.0
+      STUDIO_PORT: 8850
+      STUDIO_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8850}:8850"
+    volumes:
+      - podcaster-daten:/data
+    restart: unless-stopped
+volumes:
+  podcaster-daten:

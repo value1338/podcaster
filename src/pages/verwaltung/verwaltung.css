@@ -1,0 +1,34 @@
+/* Verwaltung (PA6). Nur Tokens aus tokens.css; Formfelder aus konto.css. */
+.verwaltung { display: grid; gap: var(--s-4); }
+.verwaltung .page__head { margin-bottom: 0; }
+.verwaltung-reiter { display: flex; gap: var(--s-1); overflow-x: auto; border-bottom: 1px solid var(--c-line); scrollbar-width: none; }
+.verwaltung-reiter__tab {
+  flex: none; height: var(--control-h); padding: 0 var(--s-3); background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--c-text-muted); cursor: pointer; font-weight: var(--fw-medium);
+}
+.verwaltung-reiter__tab:hover { color: var(--c-text); }
+.verwaltung-reiter__tab.is-aktiv { color: var(--c-text); border-bottom-color: var(--c-accent); }
+.verwaltung-panel { display: grid; gap: var(--s-4); min-width: 0; }
+.verwaltung-stapel { display: grid; gap: var(--s-4); min-width: 0; }
+.verwaltung-liste { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
+.verwaltung-zeile {
+  display: grid; gap: var(--s-3); padding: var(--s-4); min-width: 0;
+  background: var(--c-surface); border: 1px solid var(--c-line); border-radius: var(--r-md);
+}
+.verwaltung-zeile .konto-zaehler { background: var(--c-panel); }
+.verwaltung-zeile__kopf { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; }
+.verwaltung-zeile__name { min-width: 0; overflow-wrap: anywhere; }
+.verwaltung-zeile__badges { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.verwaltung-zeile__aktionen { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.verwaltung-klein { font-size: var(--fs-xs); }
+.verwaltung-klein code { font-family: var(--font-mono); }
+.verwaltung-inline { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); }
+.verwaltung-select {
+  height: var(--control-h-sm); padding: 0 var(--s-2); background: var(--c-surface-2);
+  border: 1px solid var(--c-line); border-radius: var(--r-md);
+}
+.konto-feld .verwaltung-select { height: var(--control-h); }
+.verwaltung-formular { display: grid; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--c-line); border-radius: var(--r-md); min-width: 0; }
+.verwaltung-felder { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s-3); }
+.verwaltung-contents { display: contents; }
+.verwaltung-unterkopf { font-size: var(--fs-md); font-weight: var(--fw-semibold); }
